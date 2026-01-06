@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[[ "${1}" == "--install" ]] && { chmod +x "$0"; mv "$0" ./winvm.sh; ./winvm.sh; exit 0; }
 
 # dockur/windows TUI manager
 # script by Ash
