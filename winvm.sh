@@ -240,7 +240,7 @@ configure_idx() {
   banner
   echo -e "${CYAN}${BOLD}Configure IDX Nix environment${RESET}"
   echo
-  echo -e "${YELLOW}This will create .idx/dev.nix (correct IDX path).${RESET}"
+  echo -e "${YELLOW}Creating clean .idx/dev.nix (no invalid attributes).${RESET}"
   echo
 
   read -rp "Continue? [y/N]: " ans
@@ -249,40 +249,46 @@ configure_idx() {
     *) echo -e "${RED}Aborted.${RESET}"; pause; return ;;
   esac
 
-  # Create .idx folder and dev.nix
   mkdir -p .idx
   cat > .idx/dev.nix <<'EOF'
 { pkgs, ... }:
 {
-  # dockur/windows tools
+  # Nixpkgs channel
+  channel = "stable-24.05";
+
+  # Packages for dockur/windows
   packages = with pkgs; [
     bash
     coreutils
     git
     curl
-    wget
     docker
     qemu_kvm
   ];
 
-  # Custom shell name
-  idx.shell = {
-    name = "dockur-windows-env";
+  # IDX-specific settings (valid attributes only)
+  idx = {
+    # VS Code extensions (optional)
+    extensions = [
+      # "ms-vscode-remote.remote-containers"  # Docker support
+    ];
+
+    # Enable web previews (optional)
+    previews.enable = true;
   };
 }
 EOF
 
   echo
-  echo -e "${GREEN}${BOLD}.idx/dev.nix written successfully.${RESET}"
+  echo -e "${GREEN}${BOLD}.idx/dev.nix fixed and ready.${RESET}"
   echo
-  echo -e "${MAGENTA}Now in Google IDX:${RESET}"
-  echo -e "  1) Open ${BOLD}Environment${RESET} tab (left sidebar)."
-  echo -e "  2) See ${BOLD}.idx/dev.nix${RESET} listed."
-  echo -e "  3) Click ${BOLD}\"Rebuild environment\"${RESET} button."
-  echo
-  echo -e "${YELLOW}After rebuild: ./winvm.sh will have Docker + KVM.${RESET}"
+  echo -e "${MAGENTA}Now rebuild:${RESET}"
+  echo -e "  1) Environment tab → click ${BOLD}\"Rebuild environment\"${RESET}"
+  echo -e "  2) Wait for green checkmark."
+  echo -e "  3) Terminal: ${BOLD}docker --version${RESET}"
   pause
 }
+
 
 check_docker_env() {
   echo -e "${CYAN}[ENV] Checking Docker...${RESET}"
