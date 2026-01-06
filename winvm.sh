@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-# dockur/windows TUI manager
+# dockur/windows TUI manager with QCOW2 support
 # script by Ash
 
 IMAGE="dockurr/windows"
 DEFAULT_PORT_WEB=8006
 DEFAULT_PORT_RDP=3389
+VM_STORAGE_DIR="${HOME}/.dockur-windows-storage"
 
 # Colors
 RED="\e[31m"
@@ -19,6 +20,7 @@ RESET="\e[0m"
 
 CONFIG_DIR="${HOME}/.dockur-windows"
 mkdir -p "$CONFIG_DIR"
+mkdir -p "$VM_STORAGE_DIR"
 
 banner() {
   clear
@@ -144,6 +146,80 @@ pick_windows_version() {
   esac
 }
 
+check_qemu_img() {
+  if ! command -v qemu-img >/dev/null 2>&1; then
+    echo -e "${YELLOW}[DISK] qemu-img not found. Installing...${RESET}"
+    return 1
+  fi
+  return 0
+}
+
+create_qcow2_disk() {
+  local disk_path="$1"
+  local disk_size="$2"
+  
+  echo -e "${CYAN}[DISK] Creating QCOW2 virtual disk: ${disk_path}${RESET}"
+  echo -e "${CYAN}[DISK] Size: ${disk_size}${RESET}"
+  
+  if [ -f "$disk_path" ]; then
+    echo -e "${YELLOW}[DISK] Disk already exists, skipping creation.${RESET}"
+    return 0
+  fi
+  
+  if check_qemu_img; then
+    if qemu-img create -f qcow2 "$disk_path" "$disk_size" >/dev/null 2>&1; then
+      echo -e "${GREEN}[DISK] QCOW2 disk created successfully.${RESET}"
+      return 0
+    else
+      echo -e "${RED}[DISK] Failed to create QCOW2 disk.${RESET}"
+      return 1
+    fi
+  else
+    echo -e "${YELLOW}[DISK] Falling back to regular directory storage.${RESET}"
+    mkdir -p "$disk_path"
+    return 0
+  fi
+}
+
+resize_qcow2_disk() {
+  local disk_path="$1"
+  local new_size="$2"
+  
+  echo -e "${CYAN}[DISK] Resizing disk to ${new_size}...${RESET}"
+  
+  if ! check_qemu_img; then
+    echo -e "${RED}[DISK] qemu-img required for resize.${RESET}"
+    return 1
+  fi
+  
+  if qemu-img resize "$disk_path" "$new_size" >/dev/null 2>&1; then
+    echo -e "${GREEN}[DISK] Disk resized successfully to ${new_size}.${RESET}"
+    return 0
+  else
+    echo -e "${RED}[DISK] Failed to resize disk.${RESET}"
+    return 1
+  fi
+}
+
+show_disk_info() {
+  local disk_path="$1"
+  
+  if [ ! -f "$disk_path" ]; then
+    echo -e "${RED}[DISK] Disk file not found: ${disk_path}${RESET}"
+    return 1
+  fi
+  
+  if check_qemu_img; then
+    echo -e "${CYAN}[DISK] QCOW2 Disk Information:${RESET}"
+    qemu-img info "$disk_path" | while IFS= read -r line; do
+      echo -e "${BLUE}  $line${RESET}"
+    done
+  else
+    echo -e "${CYAN}[DISK] Disk Information:${RESET}"
+    ls -lh "$disk_path"
+  fi
+}
+
 create_or_edit_config() {
   banner
   echo -e "${YELLOW}${BOLD}Create / Edit VM configuration${RESET}"
@@ -195,20 +271,16 @@ create_or_edit_config() {
   read -rp "KEYBOARD layout (e.g. en-US) [${KEYBOARD:-en-US}]: " keyb
   KEYBOARD="${keyb:-${KEYBOARD:-en-US}}"
 
-  read -rp "Storage path on host (for main disk) [${STORAGE_PATH:-$PWD/windows-$VM_NAME}]: " stor
-  STORAGE_PATH="${stor:-${STORAGE_PATH:-$PWD/windows-$VM_NAME}}"
-
-  read -rp "Second disk storage path (if DISK2_SIZE set) [${STORAGE2_PATH:-$PWD/${VM_NAME}-disk2}]: " stor2
-  STORAGE2_PATH="${stor2:-${STORAGE2_PATH:-$PWD/${VM_NAME}-disk2}}"
+  # QCOW2 disk paths
+  DISK_IMAGE="${VM_STORAGE_DIR}/${VM_NAME}.qcow2"
+  DISK2_IMAGE="${VM_STORAGE_DIR}/${VM_NAME}-disk2.qcow2"
+  STORAGE_PATH="${VM_STORAGE_DIR}/${VM_NAME}-storage"
 
   read -rp "Shared folder on host (mounted to /shared, empty to skip) [${SHARED_PATH:-}]: " shared
   SHARED_PATH="${shared:-${SHARED_PATH:-}}"
 
   read -rp "OEM folder with install.bat (mounted to /oem, empty to skip) [${OEM_PATH:-}]: " oem
   OEM_PATH="${oem:-${OEM_PATH:-}}"
-
-  mkdir -p "$STORAGE_PATH"
-  [ -n "$DISK2_SIZE" ] && mkdir -p "$STORAGE2_PATH"
 
   cat > "$CFG" <<EOF
 VM_NAME="$VM_NAME"
@@ -224,8 +296,9 @@ PASSWORD="$PASSWORD"
 LANGUAGE="$LANGUAGE"
 REGION="$REGION"
 KEYBOARD="$KEYBOARD"
+DISK_IMAGE="$DISK_IMAGE"
+DISK2_IMAGE="$DISK2_IMAGE"
 STORAGE_PATH="$STORAGE_PATH"
-STORAGE2_PATH="$STORAGE2_PATH"
 SHARED_PATH="$SHARED_PATH"
 OEM_PATH="$OEM_PATH"
 EOF
@@ -242,7 +315,7 @@ configure_idx() {
   echo -e "${YELLOW}This will:${RESET}"
   echo -e "  1. Remove old .idx folder completely"
   echo -e "  2. Create new .idx/dev.nix with minimal working config"
-  echo -e "  3. Include Docker, KVM, bash, git, curl"
+  echo -e "  3. Include Docker, KVM, qemu-img, bash, git, curl"
   echo
 
   read -rp "Continue? [y/N]: " ans
@@ -277,6 +350,7 @@ configure_idx() {
     curl
     docker
     qemu_kvm
+    qemu
     nettools
   ];
 
@@ -315,6 +389,7 @@ EOF
   echo
   echo -e "${GREEN}After rebuild, test in terminal:${RESET}"
   echo -e "  ${BOLD}docker --version${RESET}"
+  echo -e "  ${BOLD}qemu-img --version${RESET}"
   echo -e "  ${BOLD}./winvm.sh${RESET}"
   pause
 }
@@ -341,6 +416,14 @@ check_docker_env() {
   else
     echo -e "${YELLOW}[ENV] /dev/kvm missing. VM will run without hardware acceleration.${RESET}"
   fi
+  
+  echo -e "${CYAN}[ENV] Checking qemu-img for disk management...${RESET}"
+  if check_qemu_img; then
+    echo -e "${GREEN}[ENV] qemu-img available for QCOW2 disk management.${RESET}"
+  else
+    echo -e "${YELLOW}[ENV] qemu-img not found. Using directory storage fallback.${RESET}"
+  fi
+  
   return 0
 }
 
@@ -396,6 +479,26 @@ create_or_start_vm() {
   check_docker_env || { pause; return; }
 
   echo
+  echo -e "${CYAN}[SETUP] Setting up storage for '${VM_NAME}'...${RESET}"
+  
+  # Create QCOW2 disks
+  mkdir -p "$STORAGE_PATH"
+  
+  if ! create_qcow2_disk "$DISK_IMAGE" "$DISK_SIZE"; then
+    echo -e "${RED}[SETUP] Failed to create main disk.${RESET}"
+    pause
+    return
+  fi
+  
+  if [ -n "$DISK2_SIZE" ]; then
+    if ! create_qcow2_disk "$DISK2_IMAGE" "$DISK2_SIZE"; then
+      echo -e "${RED}[SETUP] Failed to create second disk.${RESET}"
+      pause
+      return
+    fi
+  fi
+
+  echo
   echo -e "${CYAN}[BUILD] Constructing docker run command for '${VM_NAME}'...${RESET}"
 
   local run_cmd=(
@@ -423,7 +526,8 @@ create_or_start_vm() {
 
   if [ -n "$DISK2_SIZE" ]; then
     run_cmd+=(-e "DISK2_SIZE=${DISK2_SIZE}")
-    run_cmd+=(-v "${STORAGE2_PATH}:/storage2")
+    mkdir -p "${VM_STORAGE_DIR}/${VM_NAME}-storage2"
+    run_cmd+=(-v "${VM_STORAGE_DIR}/${VM_NAME}-storage2:/storage2")
     echo -e "${CYAN}[BUILD] Added second disk: ${DISK2_SIZE}${RESET}"
   fi
 
@@ -518,7 +622,7 @@ delete_vm() {
   check_docker_env || { pause; return; }
 
   echo -e "${YELLOW}This will delete the container only.${RESET}"
-  echo -e "${YELLOW}Config and disk storage will be preserved.${RESET}"
+  echo -e "${YELLOW}Config and disk images will be preserved.${RESET}"
   echo
   read -rp "Delete container '${VM_NAME}'? [y/N]: " ans
   case "$ans" in
@@ -533,6 +637,47 @@ delete_vm() {
       echo -e "${CYAN}Cancelled.${RESET}"
       ;;
   esac
+  pause
+}
+
+delete_vm_completely() {
+  banner
+  echo -e "${RED}${BOLD}Delete VM completely (container + disks + config)${RESET}"
+  echo
+
+  if ! select_vm; then
+    pause
+    return
+  fi
+
+  load_vm_config "$SELECTED_VM"
+
+  echo -e "${RED}${BOLD}WARNING: This will permanently delete:${RESET}"
+  echo -e "  - Container: ${VM_NAME}"
+  echo -e "  - Disk images: ${DISK_IMAGE}"
+  [ -n "$DISK2_SIZE" ] && echo -e "  - Second disk: ${DISK2_IMAGE}"
+  echo -e "  - Storage: ${STORAGE_PATH}"
+  echo -e "  - Config: $(config_file_for_vm "$VM_NAME")"
+  echo
+  read -rp "Type VM name '${VM_NAME}' to confirm deletion: " confirm
+
+  if [ "$confirm" = "$VM_NAME" ]; then
+    echo -e "${YELLOW}[DELETE] Removing container...${RESET}"
+    docker rm -f "$VM_NAME" >/dev/null 2>&1
+    
+    echo -e "${YELLOW}[DELETE] Removing disk images...${RESET}"
+    rm -f "$DISK_IMAGE" "$DISK2_IMAGE"
+    
+    echo -e "${YELLOW}[DELETE] Removing storage directory...${RESET}"
+    rm -rf "$STORAGE_PATH" "${VM_STORAGE_DIR}/${VM_NAME}-storage2"
+    
+    echo -e "${YELLOW}[DELETE] Removing config...${RESET}"
+    rm -f "$(config_file_for_vm "$VM_NAME")"
+    
+    echo -e "${GREEN}[DELETE] VM '${VM_NAME}' completely deleted.${RESET}"
+  else
+    echo -e "${CYAN}Cancelled. Name did not match.${RESET}"
+  fi
   pause
 }
 
@@ -561,14 +706,92 @@ show_vm_info() {
   echo -e "${BOLD}Language:${RESET}          $LANGUAGE"
   echo -e "${BOLD}Region:${RESET}            $REGION"
   echo -e "${BOLD}Keyboard:${RESET}          $KEYBOARD"
+  echo -e "${BOLD}Disk Image:${RESET}        $DISK_IMAGE"
+  echo -e "${BOLD}Disk2 Image:${RESET}       ${DISK2_IMAGE:-<none>}"
   echo -e "${BOLD}Storage Path:${RESET}      $STORAGE_PATH"
-  echo -e "${BOLD}Storage2 Path:${RESET}     ${STORAGE2_PATH:-<none>}"
   echo -e "${BOLD}Shared Path:${RESET}       ${SHARED_PATH:-<none>}"
   echo -e "${BOLD}OEM Path:${RESET}          ${OEM_PATH:-<none>}"
   echo
   echo -e "${YELLOW}Connection Info:${RESET}"
   echo -e "  RDP:  ${BOLD}localhost:${RDP_PORT}${RESET}"
   echo -e "  Web:  ${BOLD}http://localhost:${WEB_PORT}${RESET}"
+  echo
+  
+  if [ -f "$DISK_IMAGE" ]; then
+    echo -e "${CYAN}Disk Information:${RESET}"
+    show_disk_info "$DISK_IMAGE"
+    echo
+  fi
+  
+  pause
+}
+
+resize_vm_disk() {
+  banner
+  echo -e "${CYAN}${BOLD}Resize VM Disk${RESET}"
+  echo
+
+  if ! select_vm; then
+    pause
+    return
+  fi
+
+  load_vm_config "$SELECTED_VM"
+
+  if ! check_qemu_img; then
+    echo -e "${RED}qemu-img required for disk resize.${RESET}"
+    echo -e "${YELLOW}Install with: apt install qemu-utils${RESET}"
+    pause
+    return
+  fi
+
+  echo -e "${CYAN}Current disk size: ${DISK_SIZE}${RESET}"
+  echo
+  read -rp "Enter new disk size (e.g., 100G, 256G): " new_size
+
+  if [ -z "$new_size" ]; then
+    echo -e "${RED}Size required.${RESET}"
+    pause
+    return
+  fi
+
+  if [ ! -f "$DISK_IMAGE" ]; then
+    echo -e "${RED}Disk image not found: ${DISK_IMAGE}${RESET}"
+    pause
+    return
+  fi
+
+  if resize_qcow2_disk "$DISK_IMAGE" "$new_size"; then
+    # Update config
+    DISK_SIZE="$new_size"
+    local CFG
+    CFG="$(config_file_for_vm "$VM_NAME")"
+    
+    cat > "$CFG" <<EOF
+VM_NAME="$VM_NAME"
+VERSION="$VERSION"
+CPU_CORES="$CPU_CORES"
+RAM_SIZE="$RAM_SIZE"
+DISK_SIZE="$DISK_SIZE"
+DISK2_SIZE="$DISK2_SIZE"
+RDP_PORT="$RDP_PORT"
+WEB_PORT="$WEB_PORT"
+USERNAME="$USERNAME"
+PASSWORD="$PASSWORD"
+LANGUAGE="$LANGUAGE"
+REGION="$REGION"
+KEYBOARD="$KEYBOARD"
+DISK_IMAGE="$DISK_IMAGE"
+DISK2_IMAGE="$DISK2_IMAGE"
+STORAGE_PATH="$STORAGE_PATH"
+SHARED_PATH="$SHARED_PATH"
+OEM_PATH="$OEM_PATH"
+EOF
+    
+    echo -e "${GREEN}Config updated with new size.${RESET}"
+    echo -e "${YELLOW}Note: You may need to extend partition inside Windows.${RESET}"
+  fi
+  
   pause
 }
 
@@ -588,8 +811,47 @@ list_all_vms() {
   local i=1
   for vm in "${VMS[@]}"; do
     echo -e "${GREEN}${i}. ${vm}${RESET}"
+    
+    # Load config and show brief info
+    if load_vm_config "$vm"; then
+      echo -e "   Version: ${VERSION}, RAM: ${RAM_SIZE}, Disk: ${DISK_SIZE}"
+      
+      # Check if disk exists
+      if [ -f "$DISK_IMAGE" ]; then
+        local disk_size_actual
+        disk_size_actual=$(du -h "$DISK_IMAGE" 2>/dev/null | cut -f1)
+        echo -e "   Disk usage: ${disk_size_actual}"
+      fi
+    fi
+    echo
     i=$((i+1))
   done
+  pause
+}
+
+show_storage_usage() {
+  banner
+  echo -e "${CYAN}${BOLD}Storage Usage${RESET}"
+  echo
+  
+  echo -e "${YELLOW}VM Storage Directory: ${VM_STORAGE_DIR}${RESET}"
+  echo
+  
+  if [ -d "$VM_STORAGE_DIR" ]; then
+    echo -e "${CYAN}Total storage usage:${RESET}"
+    du -sh "$VM_STORAGE_DIR"
+    echo
+    
+    echo -e "${CYAN}Individual VM disks:${RESET}"
+    ls -lh "$VM_STORAGE_DIR"/*.qcow2 2>/dev/null || echo -e "${YELLOW}No QCOW2 disks found.${RESET}"
+    echo
+  else
+    echo -e "${YELLOW}Storage directory not created yet.${RESET}"
+  fi
+  
+  echo -e "${CYAN}Docker storage usage:${RESET}"
+  docker system df 2>/dev/null || echo -e "${YELLOW}Docker not available.${RESET}"
+  
   pause
 }
 
@@ -606,6 +868,9 @@ main_menu() {
     echo -e "  ${GREEN}6)${RESET} Delete VM container"
     echo -e "  ${GREEN}7)${RESET} List all configured VMs"
     echo -e "  ${CYAN}8)${RESET} ${BOLD}Configure IDX (Nix environment)${RESET}"
+    echo -e "  ${MAGENTA}9)${RESET} Resize VM disk"
+    echo -e "  ${MAGENTA}10)${RESET} Show storage usage"
+    echo -e "  ${RED}11)${RESET} Delete VM completely (container + disks)"
     echo -e "  ${GREEN}0)${RESET} Exit"
     echo
     read -rp "Choose an option: " opt
@@ -619,6 +884,9 @@ main_menu() {
       6) delete_vm ;;
       7) list_all_vms ;;
       8) configure_idx ;;
+      9) resize_vm_disk ;;
+      10) show_storage_usage ;;
+      11) delete_vm_completely ;;
       0) echo -e "${MAGENTA}Goodbye!${RESET}"; exit 0 ;;
       *) echo -e "${RED}Invalid option.${RESET}"; sleep 1 ;;
     esac
