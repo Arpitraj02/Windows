@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-[[ "${1}" == "--install" ]] && { chmod +x "$0"; mv "$0" ./winvm.sh; ./winvm.sh; exit 0; }
 
 # dockur/windows TUI manager
 # script by Ash
@@ -104,7 +103,7 @@ pick_windows_version() {
     "2012 - Windows Server 2012"
     "2008 - Windows Server 2008"
     "2003 - Windows Server 2003"
-    "CUSTOM - Enter ISO URL / manual value"
+    "CUSTOM - Enter ISO URL or manual value"
   )
 
   local i=1
@@ -139,7 +138,7 @@ pick_windows_version() {
       VERSION="$custom_ver"
       ;;
     *)
-      echo -e "${RED}Invalid, using default 11.${RESET}"
+      echo -e "${RED}Invalid choice, using default: 11${RESET}"
       VERSION="11"
       ;;
   esac
@@ -149,7 +148,7 @@ create_or_edit_config() {
   banner
   echo -e "${YELLOW}${BOLD}Create / Edit VM configuration${RESET}"
   echo
-  read -rp "VM name (no spaces) : " VM_NAME
+  read -rp "VM name (no spaces): " VM_NAME
   [ -z "$VM_NAME" ] && echo -e "${RED}Name required.${RESET}" && pause && return
 
   local CFG
@@ -163,49 +162,49 @@ create_or_edit_config() {
   echo -e "${GREEN}Selected VERSION=${VERSION}${RESET}"
   echo
 
-  read -rp "CPU cores [${CPU_CORES:-2}] : " cpu
+  read -rp "CPU cores [${CPU_CORES:-2}]: " cpu
   CPU_CORES="${cpu:-${CPU_CORES:-2}}"
 
-  read -rp "RAM size (e.g. 4G, 8G) [${RAM_SIZE:-4G}] : " ram
+  read -rp "RAM size (e.g. 4G, 8G) [${RAM_SIZE:-4G}]: " ram
   RAM_SIZE="${ram:-${RAM_SIZE:-4G}}"
 
-  read -rp "Disk size (e.g. 64G, 128G) [${DISK_SIZE:-64G}] : " disk
+  read -rp "Disk size (e.g. 64G, 128G) [${DISK_SIZE:-64G}]: " disk
   DISK_SIZE="${disk:-${DISK_SIZE:-64G}}"
 
-  read -rp "Second disk size (e.g. 32G, empty to disable) [${DISK2_SIZE:-}] : " disk2
+  read -rp "Second disk size (e.g. 32G, empty to disable) [${DISK2_SIZE:-}]: " disk2
   DISK2_SIZE="${disk2:-${DISK2_SIZE:-}}"
 
-  read -rp "RDP port on host [${RDP_PORT:-$DEFAULT_PORT_RDP}] : " rdp
+  read -rp "RDP port on host [${RDP_PORT:-$DEFAULT_PORT_RDP}]: " rdp
   RDP_PORT="${rdp:-${RDP_PORT:-$DEFAULT_PORT_RDP}}"
 
-  read -rp "Web viewer port on host [${WEB_PORT:-$DEFAULT_PORT_WEB}] : " web
+  read -rp "Web viewer port on host [${WEB_PORT:-$DEFAULT_PORT_WEB}]: " web
   WEB_PORT="${web:-${WEB_PORT:-$DEFAULT_PORT_WEB}}"
 
-  read -rp "Username [${USERNAME:-Docker}] : " user
+  read -rp "Username [${USERNAME:-Docker}]: " user
   USERNAME="${user:-${USERNAME:-Docker}}"
 
-  read -rp "Password [${PASSWORD:-admin}] : " pass
+  read -rp "Password [${PASSWORD:-admin}]: " pass
   PASSWORD="${pass:-${PASSWORD:-admin}}"
 
-  read -rp "Windows LANGUAGE (e.g. English, French) [${LANGUAGE:-English}] : " lang
+  read -rp "Windows LANGUAGE (e.g. English, French) [${LANGUAGE:-English}]: " lang
   LANGUAGE="${lang:-${LANGUAGE:-English}}"
 
-  read -rp "REGION (e.g. en-US, fr-FR) [${REGION:-en-US}] : " reg
+  read -rp "REGION (e.g. en-US, fr-FR) [${REGION:-en-US}]: " reg
   REGION="${reg:-${REGION:-en-US}}"
 
-  read -rp "KEYBOARD layout (e.g. en-US) [${KEYBOARD:-en-US}] : " keyb
+  read -rp "KEYBOARD layout (e.g. en-US) [${KEYBOARD:-en-US}]: " keyb
   KEYBOARD="${keyb:-${KEYBOARD:-en-US}}"
 
-  read -rp "Storage path on host (for main disk) [${STORAGE_PATH:-$PWD/windows-$VM_NAME}] : " stor
+  read -rp "Storage path on host (for main disk) [${STORAGE_PATH:-$PWD/windows-$VM_NAME}]: " stor
   STORAGE_PATH="${stor:-${STORAGE_PATH:-$PWD/windows-$VM_NAME}}"
 
-  read -rp "Second disk storage path (if DISK2_SIZE set) [${STORAGE2_PATH:-$PWD/${VM_NAME}-disk2}] : " stor2
+  read -rp "Second disk storage path (if DISK2_SIZE set) [${STORAGE2_PATH:-$PWD/${VM_NAME}-disk2}]: " stor2
   STORAGE2_PATH="${stor2:-${STORAGE2_PATH:-$PWD/${VM_NAME}-disk2}}"
 
-  read -rp "Shared folder on host (mounted to /shared, empty to skip) [${SHARED_PATH:-}] : " shared
+  read -rp "Shared folder on host (mounted to /shared, empty to skip) [${SHARED_PATH:-}]: " shared
   SHARED_PATH="${shared:-${SHARED_PATH:-}}"
 
-  read -rp "OEM folder with install.bat (mounted to /oem, empty to skip) [${OEM_PATH:-}] : " oem
+  read -rp "OEM folder with install.bat (mounted to /oem, empty to skip) [${OEM_PATH:-}]: " oem
   OEM_PATH="${oem:-${OEM_PATH:-}}"
 
   mkdir -p "$STORAGE_PATH"
@@ -240,7 +239,10 @@ configure_idx() {
   banner
   echo -e "${CYAN}${BOLD}Configure IDX Nix environment${RESET}"
   echo
-  echo -e "${YELLOW}Creating clean .idx/dev.nix (no invalid attributes).${RESET}"
+  echo -e "${YELLOW}This will:${RESET}"
+  echo -e "  1. Remove old .idx folder completely"
+  echo -e "  2. Create new .idx/dev.nix with minimal working config"
+  echo -e "  3. Include Docker, KVM, bash, git, curl"
   echo
 
   read -rp "Continue? [y/N]: " ans
@@ -249,14 +251,25 @@ configure_idx() {
     *) echo -e "${RED}Aborted.${RESET}"; pause; return ;;
   esac
 
+  echo
+  echo -e "${YELLOW}[STEP 1/3] Removing old .idx folder...${RESET}"
+  if [ -d .idx ]; then
+    rm -rf .idx
+    echo -e "${GREEN}Old .idx folder removed.${RESET}"
+  else
+    echo -e "${CYAN}.idx folder did not exist, creating fresh.${RESET}"
+  fi
+
+  echo -e "${YELLOW}[STEP 2/3] Creating .idx directory...${RESET}"
   mkdir -p .idx
+  echo -e "${GREEN}.idx directory created.${RESET}"
+
+  echo -e "${YELLOW}[STEP 3/3] Writing .idx/dev.nix...${RESET}"
+  
   cat > .idx/dev.nix <<'EOF'
-{ pkgs, ... }:
-{
-  # Nixpkgs channel
+{ pkgs, ... }: {
   channel = "stable-24.05";
 
-  # Packages for dockur/windows
   packages = with pkgs; [
     bash
     coreutils
@@ -264,50 +277,69 @@ configure_idx() {
     curl
     docker
     qemu_kvm
+    nettools
   ];
 
-  # IDX-specific settings (valid attributes only)
   idx = {
-    # VS Code extensions (optional)
     extensions = [
-      # "ms-vscode-remote.remote-containers"  # Docker support
+      "ms-vscode-remote.remote-containers"
     ];
 
-    # Enable web previews (optional)
-    previews.enable = true;
+    previews = {
+      enable = true;
+    };
   };
 }
 EOF
 
+  if [ -f .idx/dev.nix ]; then
+    local size
+    size=$(wc -c < .idx/dev.nix)
+    echo -e "${GREEN}.idx/dev.nix written successfully (${size} bytes).${RESET}"
+    echo
+    echo -e "${CYAN}Content preview:${RESET}"
+    head -10 .idx/dev.nix | sed 's/^/  /'
+    echo
+  else
+    echo -e "${RED}Failed to write .idx/dev.nix${RESET}"
+    pause
+    return 1
+  fi
+
+  echo -e "${MAGENTA}${BOLD}NEXT STEPS IN IDX UI:${RESET}"
+  echo -e "  1. Open left sidebar"
+  echo -e "  2. Click ${BOLD}Environment${RESET} tab (gear icon)"
+  echo -e "  3. Verify .idx/dev.nix is shown"
+  echo -e "  4. Click ${BOLD}\"Rebuild environment\"${RESET} button"
+  echo -e "  5. Wait 30-90 seconds for rebuild to complete"
   echo
-  echo -e "${GREEN}${BOLD}.idx/dev.nix fixed and ready.${RESET}"
-  echo
-  echo -e "${MAGENTA}Now rebuild:${RESET}"
-  echo -e "  1) Environment tab → click ${BOLD}\"Rebuild environment\"${RESET}"
-  echo -e "  2) Wait for green checkmark."
-  echo -e "  3) Terminal: ${BOLD}docker --version${RESET}"
+  echo -e "${GREEN}After rebuild, test in terminal:${RESET}"
+  echo -e "  ${BOLD}docker --version${RESET}"
+  echo -e "  ${BOLD}./winvm.sh${RESET}"
   pause
 }
 
-
 check_docker_env() {
-  echo -e "${CYAN}[ENV] Checking Docker...${RESET}"
+  echo -e "${CYAN}[ENV] Checking Docker availability...${RESET}"
   if ! command -v docker >/dev/null 2>&1; then
     echo -e "${RED}[ENV] docker CLI not found in PATH.${RESET}"
+    echo -e "${YELLOW}[ENV] Run option 8 to configure IDX, then rebuild.${RESET}"
     return 1
   fi
 
   if ! docker info >/dev/null 2>&1; then
-    echo -e "${RED}[ENV] docker daemon not reachable (permissions or service).${RESET}"
+    echo -e "${RED}[ENV] docker daemon not reachable.${RESET}"
+    echo -e "${YELLOW}[ENV] Check permissions or wait for IDX to start Docker service.${RESET}"
     return 1
   fi
 
   echo -e "${GREEN}[ENV] Docker is ready.${RESET}"
-  echo -e "${CYAN}[ENV] Checking /dev/kvm (optional for acceleration)...${RESET}"
+  
+  echo -e "${CYAN}[ENV] Checking /dev/kvm for acceleration...${RESET}"
   if [ -e /dev/kvm ]; then
-    echo -e "${GREEN}[ENV] /dev/kvm present (KVM accel likely available).${RESET}"
+    echo -e "${GREEN}[ENV] /dev/kvm present. KVM acceleration available.${RESET}"
   else
-    echo -e "${YELLOW}[ENV] /dev/kvm missing. VM will still run but slower (no KVM).${RESET}"
+    echo -e "${YELLOW}[ENV] /dev/kvm missing. VM will run without hardware acceleration.${RESET}"
   fi
   return 0
 }
@@ -319,31 +351,33 @@ realtime_start_log() {
   echo
   echo -e "${MAGENTA}${BOLD}========== VM START LOG (${name}) ==========${RESET}"
   echo -e "${CYAN}[VM] Container name: ${name}${RESET}"
-  echo -e "${CYAN}[VM] Web viewer: http://localhost:${web}${RESET}"
-  echo -e "${CYAN}[VM] RDP:        localhost:${rdp}${RESET}"
-  echo -e "${CYAN}[VM] User/pass:  Docker/admin (or your configured values)${RESET}"
+  echo -e "${CYAN}[VM] Web viewer:     http://localhost:${web}${RESET}"
+  echo -e "${CYAN}[VM] RDP:            localhost:${rdp}${RESET}"
+  echo -e "${CYAN}[VM] Credentials:    Username/Password from config${RESET}"
   echo
 
-  echo -e "${YELLOW}[VM] Step 1: Pulling image and creating container...${RESET}"
-  echo -e "${YELLOW}[VM] Step 2: Waiting for container to switch to 'running'...${RESET}"
+  echo -e "${YELLOW}[LOG] Waiting for container to reach running state...${RESET}"
 
   for i in $(seq 1 30); do
     local state
     state=$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || echo "missing")
-    echo -e "${BLUE}[VM] Tick ${i}: status=${state}${RESET}"
+    echo -e "${BLUE}[LOG] Check ${i}/30: container status = ${state}${RESET}"
     if [ "$state" = "running" ]; then
-      echo -e "${GREEN}[VM] Container is running!${RESET}"
+      echo -e "${GREEN}[LOG] Container is running!${RESET}"
       break
     fi
     sleep 2
   done
 
   echo
-  echo -e "${YELLOW}[VM] Step 3: Streaming Windows install logs (docker logs)...${RESET}"
-  echo -e "${YELLOW}[VM] Press Ctrl+C to stop viewing logs (VM will keep running).${RESET}"
+  echo -e "${YELLOW}[LOG] Streaming Windows installation logs...${RESET}"
+  echo -e "${YELLOW}[LOG] Press Ctrl+C to stop viewing (VM will keep running)${RESET}"
+  echo -e "${MAGENTA}${BOLD}===========================================${RESET}"
   echo
 
-  docker logs -f "$name"
+  docker logs -f "$name" 2>&1 | while IFS= read -r line; do
+    echo -e "${CYAN}[DOCKER]${RESET} $line"
+  done
 }
 
 create_or_start_vm() {
@@ -353,7 +387,7 @@ create_or_start_vm() {
 
   if ! select_vm; then
     echo
-    echo "Use 'Create / Edit configuration' first."
+    echo -e "${YELLOW}Use option 1 to create a configuration first.${RESET}"
     pause
     return
   fi
@@ -362,7 +396,7 @@ create_or_start_vm() {
   check_docker_env || { pause; return; }
 
   echo
-  echo -e "${CYAN}[CMD] Building docker run command for '${VM_NAME}'...${RESET}"
+  echo -e "${CYAN}[BUILD] Constructing docker run command for '${VM_NAME}'...${RESET}"
 
   local run_cmd=(
     docker run -d
@@ -390,31 +424,36 @@ create_or_start_vm() {
   if [ -n "$DISK2_SIZE" ]; then
     run_cmd+=(-e "DISK2_SIZE=${DISK2_SIZE}")
     run_cmd+=(-v "${STORAGE2_PATH}:/storage2")
+    echo -e "${CYAN}[BUILD] Added second disk: ${DISK2_SIZE}${RESET}"
   fi
 
   if [ -n "$SHARED_PATH" ]; then
     run_cmd+=(-v "${SHARED_PATH}:/shared")
+    echo -e "${CYAN}[BUILD] Added shared folder: ${SHARED_PATH}${RESET}"
   fi
 
   if [ -n "$OEM_PATH" ]; then
     run_cmd+=(-v "${OEM_PATH}:/oem")
+    echo -e "${CYAN}[BUILD] Added OEM folder: ${OEM_PATH}${RESET}"
   fi
 
   run_cmd+=("$IMAGE")
 
-  echo -e "${YELLOW}[CMD] Command:${RESET}"
-  echo -e "${BLUE}${BOLD}${run_cmd[*]}${RESET}"
+  echo
+  echo -e "${YELLOW}[BUILD] Full command:${RESET}"
+  echo -e "${BLUE}${run_cmd[*]}${RESET}"
   echo
 
-  echo -e "${YELLOW}[VM] Removing old container with same name (if exists)...${RESET}"
+  echo -e "${YELLOW}[EXEC] Removing any existing container with same name...${RESET}"
   docker rm -f "$VM_NAME" >/dev/null 2>&1
 
-  echo -e "${YELLOW}[VM] Running container...${RESET}"
+  echo -e "${YELLOW}[EXEC] Starting container...${RESET}"
   if "${run_cmd[@]}" >/dev/null 2>&1; then
-    echo -e "${GREEN}[VM] VM '${VM_NAME}' created/started successfully!${RESET}"
+    echo -e "${GREEN}[EXEC] Container '${VM_NAME}' created successfully.${RESET}"
     realtime_start_log "$VM_NAME" "$WEB_PORT" "$RDP_PORT"
   else
-    echo -e "${RED}[VM] Failed to start VM '${VM_NAME}'. Check docker logs manually.${RESET}"
+    echo -e "${RED}[EXEC] Failed to start VM '${VM_NAME}'.${RESET}"
+    echo -e "${YELLOW}Run: docker logs ${VM_NAME}${RESET}"
   fi
   pause
 }
@@ -432,12 +471,13 @@ start_vm_only() {
   load_vm_config "$SELECTED_VM"
   check_docker_env || { pause; return; }
 
-  echo -e "${YELLOW}[VM] Starting container '${VM_NAME}'...${RESET}"
+  echo -e "${YELLOW}[EXEC] Starting container '${VM_NAME}'...${RESET}"
   if docker start "$VM_NAME" >/dev/null 2>&1; then
-    echo -e "${GREEN}[VM] VM '${VM_NAME}' started.${RESET}"
+    echo -e "${GREEN}[EXEC] VM '${VM_NAME}' started.${RESET}"
     realtime_start_log "$VM_NAME" "$WEB_PORT" "$RDP_PORT"
   else
-    echo -e "${RED}[VM] Failed to start container '${VM_NAME}'. Maybe it does not exist yet.${RESET}"
+    echo -e "${RED}[EXEC] Failed to start container '${VM_NAME}'.${RESET}"
+    echo -e "${YELLOW}Container may not exist. Use option 2 to create it.${RESET}"
     pause
   fi
 }
@@ -455,18 +495,18 @@ stop_vm() {
   load_vm_config "$SELECTED_VM"
   check_docker_env || { pause; return; }
 
-  echo -e "${YELLOW}[VM] Stopping '${VM_NAME}'...${RESET}"
+  echo -e "${YELLOW}[EXEC] Stopping container '${VM_NAME}'...${RESET}"
   if docker stop "$VM_NAME" >/dev/null 2>&1; then
-    echo -e "${GREEN}[VM] VM '${VM_NAME}' stopped.${RESET}"
+    echo -e "${GREEN}[EXEC] VM '${VM_NAME}' stopped successfully.${RESET}"
   else
-    echo -e "${RED}[VM] Failed to stop VM '${VM_NAME}'.${RESET}"
+    echo -e "${RED}[EXEC] Failed to stop VM '${VM_NAME}'.${RESET}"
   fi
   pause
 }
 
 delete_vm() {
   banner
-  echo -e "${RED}${BOLD}Delete VM (container only)${RESET}"
+  echo -e "${RED}${BOLD}Delete VM container${RESET}"
   echo
 
   if ! select_vm; then
@@ -477,17 +517,20 @@ delete_vm() {
   load_vm_config "$SELECTED_VM"
   check_docker_env || { pause; return; }
 
-  read -rp "Delete container '${VM_NAME}' (config and disks kept)? [y/N]: " ans
+  echo -e "${YELLOW}This will delete the container only.${RESET}"
+  echo -e "${YELLOW}Config and disk storage will be preserved.${RESET}"
+  echo
+  read -rp "Delete container '${VM_NAME}'? [y/N]: " ans
   case "$ans" in
     y|Y)
       if docker rm -f "$VM_NAME" >/dev/null 2>&1; then
-        echo -e "${GREEN}[VM] Container '${VM_NAME}' deleted.${RESET}"
+        echo -e "${GREEN}[EXEC] Container '${VM_NAME}' deleted.${RESET}"
       else
-        echo -e "${RED}[VM] Failed to delete container '${VM_NAME}'.${RESET}"
+        echo -e "${RED}[EXEC] Failed to delete container '${VM_NAME}'.${RESET}"
       fi
       ;;
     *)
-      echo "Aborted."
+      echo -e "${CYAN}Cancelled.${RESET}"
       ;;
   esac
   pause
@@ -495,7 +538,7 @@ delete_vm() {
 
 show_vm_info() {
   banner
-  echo -e "${CYAN}${BOLD}VM info${RESET}"
+  echo -e "${CYAN}${BOLD}VM Information${RESET}"
   echo
 
   if ! select_vm; then
@@ -505,41 +548,47 @@ show_vm_info() {
 
   load_vm_config "$SELECTED_VM"
 
-  echo -e "${BOLD}VM Name:${RESET}        $VM_NAME"
-  echo -e "${BOLD}Windows VERSION:${RESET} $VERSION"
-  echo -e "${BOLD}CPU Cores:${RESET}      $CPU_CORES"
-  echo -e "${BOLD}RAM Size:${RESET}       $RAM_SIZE"
-  echo -e "${BOLD}Disk Size:${RESET}      $DISK_SIZE"
-  echo -e "${BOLD}Disk2 Size:${RESET}     ${DISK2_SIZE:-<none>}"
-  echo -e "${BOLD}Web Port:${RESET}       $WEB_PORT"
-  echo -e "${BOLD}RDP Port:${RESET}       $RDP_PORT"
-  echo -e "${BOLD}Username:${RESET}       $USERNAME"
-  echo -e "${BOLD}Language:${RESET}       $LANGUAGE"
-  echo -e "${BOLD}Region:${RESET}         $REGION"
-  echo -e "${BOLD}Keyboard:${RESET}       $KEYBOARD"
-  echo -e "${BOLD}Storage Path:${RESET}   $STORAGE_PATH"
-  echo -e "${BOLD}Storage2 Path:${RESET}  ${STORAGE2_PATH:-<none>}"
-  echo -e "${BOLD}Shared Path:${RESET}    ${SHARED_PATH:-<none>}"
-  echo -e "${BOLD}OEM Path:${RESET}       ${OEM_PATH:-<none>}"
+  echo -e "${BOLD}VM Name:${RESET}           $VM_NAME"
+  echo -e "${BOLD}Windows VERSION:${RESET}   $VERSION"
+  echo -e "${BOLD}CPU Cores:${RESET}         $CPU_CORES"
+  echo -e "${BOLD}RAM Size:${RESET}          $RAM_SIZE"
+  echo -e "${BOLD}Disk Size:${RESET}         $DISK_SIZE"
+  echo -e "${BOLD}Second Disk:${RESET}       ${DISK2_SIZE:-<none>}"
+  echo -e "${BOLD}Web Port:${RESET}          $WEB_PORT"
+  echo -e "${BOLD}RDP Port:${RESET}          $RDP_PORT"
+  echo -e "${BOLD}Username:${RESET}          $USERNAME"
+  echo -e "${BOLD}Password:${RESET}          $PASSWORD"
+  echo -e "${BOLD}Language:${RESET}          $LANGUAGE"
+  echo -e "${BOLD}Region:${RESET}            $REGION"
+  echo -e "${BOLD}Keyboard:${RESET}          $KEYBOARD"
+  echo -e "${BOLD}Storage Path:${RESET}      $STORAGE_PATH"
+  echo -e "${BOLD}Storage2 Path:${RESET}     ${STORAGE2_PATH:-<none>}"
+  echo -e "${BOLD}Shared Path:${RESET}       ${SHARED_PATH:-<none>}"
+  echo -e "${BOLD}OEM Path:${RESET}          ${OEM_PATH:-<none>}"
   echo
-  echo -e "${YELLOW}RDP connect:${RESET} ${BOLD}localhost:${RDP_PORT}${RESET}"
-  echo -e "${YELLOW}Web viewer:${RESET}   http://localhost:${WEB_PORT}"
+  echo -e "${YELLOW}Connection Info:${RESET}"
+  echo -e "  RDP:  ${BOLD}localhost:${RDP_PORT}${RESET}"
+  echo -e "  Web:  ${BOLD}http://localhost:${WEB_PORT}${RESET}"
   pause
 }
 
 list_all_vms() {
   banner
-  echo -e "${CYAN}${BOLD}Configured VMs${RESET}"
+  echo -e "${CYAN}${BOLD}All Configured VMs${RESET}"
   echo
   local VMS
   mapfile -t VMS < <(list_configs)
   if [ "${#VMS[@]}" -eq 0 ]; then
-    echo -e "${RED}No VM configs found.${RESET}"
+    echo -e "${RED}No VM configurations found.${RESET}"
+    echo -e "${YELLOW}Use option 1 to create a new VM configuration.${RESET}"
     pause
     return
   fi
+  
+  local i=1
   for vm in "${VMS[@]}"; do
-    echo -e "${GREEN}- ${vm}${RESET}"
+    echo -e "${GREEN}${i}. ${vm}${RESET}"
+    i=$((i+1))
   done
   pause
 }
@@ -550,13 +599,13 @@ main_menu() {
     echo -e "${BLUE}${BOLD}Main Menu${RESET}"
     echo
     echo -e "  ${GREEN}1)${RESET} Create / Edit VM configuration"
-    echo -e "  ${GREEN}2)${RESET} Create & Start VM"
+    echo -e "  ${GREEN}2)${RESET} Create and Start VM"
     echo -e "  ${GREEN}3)${RESET} Start existing VM"
     echo -e "  ${GREEN}4)${RESET} Stop VM"
     echo -e "  ${GREEN}5)${RESET} Show VM info"
     echo -e "  ${GREEN}6)${RESET} Delete VM container"
     echo -e "  ${GREEN}7)${RESET} List all configured VMs"
-    echo -e "  ${CYAN}8)${RESET} ${BOLD}Configure IDX (Nix env)${RESET}"
+    echo -e "  ${CYAN}8)${RESET} ${BOLD}Configure IDX (Nix environment)${RESET}"
     echo -e "  ${GREEN}0)${RESET} Exit"
     echo
     read -rp "Choose an option: " opt
