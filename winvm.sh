@@ -240,18 +240,21 @@ configure_idx() {
   banner
   echo -e "${CYAN}${BOLD}Configure IDX Nix environment${RESET}"
   echo
-  echo -e "${YELLOW}This will create or overwrite ./idx.nix with tools needed for dockur/windows.${RESET}"
+  echo -e "${YELLOW}This will create .idx/dev.nix (correct IDX path).${RESET}"
   echo
 
-  read -rp "Continue and write idx.nix here? [y/N]: " ans
+  read -rp "Continue? [y/N]: " ans
   case "$ans" in
     y|Y) ;;
     *) echo -e "${RED}Aborted.${RESET}"; pause; return ;;
   esac
 
-  cat > idx.nix <<'EOF'
+  # Create .idx folder and dev.nix
+  mkdir -p .idx
+  cat > .idx/dev.nix <<'EOF'
 { pkgs, ... }:
 {
+  # dockur/windows tools
   packages = with pkgs; [
     bash
     coreutils
@@ -262,6 +265,7 @@ configure_idx() {
     qemu_kvm
   ];
 
+  # Custom shell name
   idx.shell = {
     name = "dockur-windows-env";
   };
@@ -269,14 +273,14 @@ configure_idx() {
 EOF
 
   echo
-  echo -e "${GREEN}${BOLD}idx.nix written successfully.${RESET}"
+  echo -e "${GREEN}${BOLD}.idx/dev.nix written successfully.${RESET}"
   echo
-  echo -e "${MAGENTA}Next step in Google IDX:${RESET}"
-  echo -e "  1) Open the ${BOLD}Environment / Configuration${RESET} panel."
-  echo -e "  2) Make sure ${BOLD}idx.nix${RESET} is selected."
-  echo -e "  3) Click ${BOLD}\"Rebuild environment\"${RESET}."
+  echo -e "${MAGENTA}Now in Google IDX:${RESET}"
+  echo -e "  1) Open ${BOLD}Environment${RESET} tab (left sidebar)."
+  echo -e "  2) See ${BOLD}.idx/dev.nix${RESET} listed."
+  echo -e "  3) Click ${BOLD}\"Rebuild environment\"${RESET} button."
   echo
-  echo -e "After rebuild, reopen the terminal and run: ${BOLD}./winvm.sh${RESET}"
+  echo -e "${YELLOW}After rebuild: ./winvm.sh will have Docker + KVM.${RESET}"
   pause
 }
 
